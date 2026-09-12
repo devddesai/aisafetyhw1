@@ -1,0 +1,24 @@
+# Show dialogue is copyrighted. Scraped transcripts and everything derived from
+# them stay local -- we ship the scripts and cite the source URL in the README.
+data/
+
+# Model artifacts and results
+out/
+results/
+*.safetensors
+*.bin
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+.ipynb_checkpoints/
+
+# OS / editor
+.DS_Store
+.vscode/
+.idea/
+
+# Local Claude Code permission state (machine-specific)
+.claude/settings.local.json
