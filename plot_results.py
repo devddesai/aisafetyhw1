@@ -35,66 +35,51 @@ def text(label):
     return label.replace("%", r"\%") if plt.rcParams["text.usetex"] else label
 
 
-def bars(ax, values, title, ylabel, labels, upper):
+def figure(title, subtitle, figsize=(8, 6), left=0.15, top=0.80, bottom=0.24):
+    fig, ax = plt.subplots(figsize=figsize)
+    fig.subplots_adjust(left=left, right=0.96, bottom=bottom, top=top)
+    fig.suptitle(title, y=0.97, fontsize=22)
+    fig.text(0.5, 0.89, subtitle, ha="center", fontsize=16)
+    return fig, ax
+
+
+def bars(ax, values, ylabel, labels, upper):
     artists = ax.bar(("Base", "SFT"), values, color=COLORS, width=0.55)
-    ax.bar_label(artists, labels=[text(label) for label in labels], padding=8, fontsize=16)
-    ax.set(title=title, ylabel=text(ylabel), ylim=(0, upper))
+    ax.bar_label(artists, labels=[text(label) for label in labels], padding=8, fontsize=18)
+    ax.set(ylabel=ylabel, ylim=(0, upper))
     ax.set_axisbelow(True)
     ax.grid(axis="y", color="0.9")
-    ax.yaxis.set_major_locator(MaxNLocator(4))
-
-
-def paired_change(ax, value, interval, title, xlabel, decimals):
-    low, high = interval
-    span = max(high, value, 0) - min(low, value, 0)
-    margin = max(span * 0.25, 0.001)
-    ax.axvline(0, ymin=0.3, ymax=0.65, color="0.5", linestyle="--", linewidth=1)
-    ax.plot([low, high], [0, 0], color=COLORS[1])
-    ax.plot([low, high], [0, 0], "|", color=COLORS[1], markersize=14)
-    ax.plot(value, 0, "o", color=COLORS[1], markersize=9)
-    ax.set(title=title, xlabel=xlabel, ylim=(-1, 1), yticks=[],
-           xlim=(min(low, value, 0) - margin, max(high, value, 0) + margin))
-    ax.spines[["left", "top", "right"]].set_visible(False)
-    ax.xaxis.set_major_locator(MaxNLocator(4))
-    ax.text(0.5, 0.76, f"{value:+.{decimals}f}", transform=ax.transAxes,
-            ha="center", fontsize=22, color=COLORS[1])
-    ax.text(0.5, 0.17, text(f"95% CI [{low:+.{decimals}f}, {high:+.{decimals}f}]"),
-            transform=ax.transAxes, ha="center", fontsize=15)
+    ax.yaxis.set_major_locator(MaxNLocator(5))
 
 
 def persona_figure(metrics):
-    fig, axes = plt.subplots(2, 2, figsize=(12, 9.5))
-    fig.subplots_adjust(left=0.10, right=0.97, bottom=0.20, top=0.82, hspace=0.65, wspace=0.4)
-    fig.suptitle("Persona evaluation: reference similarity and reply length", y=0.98, fontsize=22)
-    fig.text(0.5, 0.92, f"{metrics['examples']:,} held-out replies from {metrics['episodes']} episodes",
-             ha="center", fontsize=16)
+    fig, ax = figure("Reference similarity",
+                      f"{metrics['examples']:,} held-out replies from {metrics['episodes']} episodes")
     similarity = [metrics[name]["mean_cosine_similarity"] for name in MODELS]
-    bars(axes[0, 0], similarity, "Reference similarity", "Mean cosine similarity",
-         [f"{value:.4f}" for value in similarity], max(0.25, max(similarity) * 1.3))
+    bars(ax, similarity, "Mean cosine similarity",
+         [f"{value:.4f}" for value in similarity], max(0.25, max(similarity) * 1.22))
+    low, high = metrics["paired_difference_episode_bootstrap_95_ci"]
+    fig.text(0.5, 0.12, text(f"Paired gain {metrics['mean_paired_difference']:+.4f} "
+             f"(95% episode-bootstrap CI: {low:+.4f} to {high:+.4f})"), ha="center", fontsize=14)
+    fig.text(0.5, 0.055, "Semantic similarity to one reference; not a direct persona-style score.",
+             ha="center", fontsize=14)
+    return fig
+
+
+def length_figure(metrics):
+    fig, ax = figure("Generated reply length", f"{metrics['examples']:,} matched prompts, greedy decoding")
     lengths = [metrics[name]["mean_generated_tokens"] for name in MODELS]
-    bars(axes[0, 1], lengths, "Reply length", "Mean generated tokens",
+    bars(ax, lengths, "Mean generated tokens",
          [f"{value:.1f}" for value in lengths], max(lengths) * 1.3)
-    paired_change(axes[1, 0], metrics["mean_paired_difference"],
-                  metrics["paired_difference_episode_bootstrap_95_ci"],
-                  "Paired similarity change", "SFT minus base\n(cosine similarity)", 4)
-    hits = [metrics[name]["generation_limit_hits"] for name in MODELS]
-    rates = [100 * count / metrics["examples"] for count in hits]
     limit = metrics["run"]["decoding"]["max_new_tokens"]
-    bars(axes[1, 1], rates, f"Replies reaching {limit} tokens", "Share of replies (%)",
-         [f"{rate:.1f}% ({count}/{metrics['examples']})" for rate, count in zip(rates, hits)],
-         max(1, max(rates) * 1.4))
-    fig.text(0.5, 0.045, "Similarity measures agreement with one reference, not persona style.\n"
-             "The paired interval resamples whole episodes; shorter replies are a separate diagnostic.",
-             ha="center", fontsize=14, linespacing=1.5)
+    fig.text(0.5, 0.10, f"Same prompts and {limit}-token generation limit for both models.",
+             ha="center", fontsize=14)
     return fig
 
 
 def physics_figure(metrics):
-    fig, (accuracy, change) = plt.subplots(1, 2, figsize=(14, 7), gridspec_kw={"width_ratios": [1.5, 1]})
-    fig.subplots_adjust(left=0.17, right=0.97, bottom=0.30, top=0.77, wspace=0.3)
-    fig.suptitle("Physics evaluation: base vs. persona SFT", y=0.98, fontsize=22)
-    fig.text(0.5, 0.90, f"{metrics['questions']} MMLU questions | Five-shot chat | A/B/C/D selection",
-             ha="center", fontsize=16)
+    fig, accuracy = figure("Physics accuracy", f"{metrics['questions']} MMLU questions, five-shot chat",
+                            figsize=(9, 7), left=0.29, top=0.74, bottom=0.26)
     subjects = [("high_school_physics", "High-school physics"), ("college_physics", "College physics"),
                 ("conceptual_physics", "Conceptual physics")]
     rows = [metrics["by_subject"][key] for key, _ in subjects] + [metrics["overall"]]
@@ -111,16 +96,13 @@ def physics_figure(metrics):
     accuracy.grid(axis="x", color="0.9")
     accuracy.set_axisbelow(True)
     accuracy.legend(loc="lower left", bbox_to_anchor=(0, 1.01), ncol=2, borderaxespad=0)
-    interval = [100 * value for value in metrics["paired_accuracy_difference_95_ci"]]
-    paired_change(change, 100 * metrics["overall"]["accuracy_difference"], interval,
-                  "Paired overall change", "SFT minus base\n(percentage points)", 2)
-    includes_zero = interval[0] <= 0 <= interval[1]
-    interpretation = ("The interval includes zero: no clear overall change." if includes_zero
+    low, high = [100 * value for value in metrics["paired_accuracy_difference_95_ci"]]
+    gain = 100 * metrics["overall"]["accuracy_difference"]
+    fig.text(0.5, 0.115, text(f"Overall gain {gain:+.2f} percentage points (95% CI: {low:+.2f} to {high:+.2f})"),
+             ha="center", fontsize=14)
+    interpretation = ("The interval includes zero: overall change is inconclusive." if low <= 0 <= high
                       else "The interval excludes zero under this evaluation protocol.")
-    fig.text(0.5, 0.105, f"{metrics['base_wrong_sft_correct']} wrong-to-correct changes; "
-             f"{metrics['base_correct_sft_wrong']} correct-to-wrong changes. {interpretation}", ha="center", fontsize=14)
-    fig.text(0.5, 0.055, text("95% paired bootstrap CI resamples questions within each subject. "
-             "Overall accuracy is weighted by question count."), ha="center", fontsize=14)
+    fig.text(0.5, 0.06, interpretation, ha="center", fontsize=14)
     return fig
 
 
@@ -133,7 +115,8 @@ def main():
     style(args.usetex)
     output_dir = args.output_dir or args.results_dir / "plots"
     output_dir.mkdir(parents=True, exist_ok=True)
-    for filename, name, draw in (("persona.json", "persona_summary", persona_figure),
+    for filename, name, draw in (("persona.json", "persona_similarity", persona_figure),
+                                 ("persona.json", "reply_length", length_figure),
                                  ("mmlu_physics.json", "physics_accuracy", physics_figure)):
         metrics = json.loads((args.results_dir / filename).read_text())
         fig = draw(metrics)

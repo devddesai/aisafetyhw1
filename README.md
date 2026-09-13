@@ -187,10 +187,12 @@ and 0.998933 for SFT.
 
 ## Results plots
 
-The plots summarize the saved scores, including the paired gains and their 95%
-bootstrap intervals:
+Each file contains one graph: reference similarity, reply length, or physics
+accuracy. Similarity and accuracy include paired gains and 95% bootstrap intervals.
 
-![Persona reference similarity and response lengths](results/plots/persona_summary.png)
+![Persona reference similarity](results/plots/persona_similarity.png)
+
+![Mean generated reply length](results/plots/reply_length.png)
 
 ![Base and SFT physics accuracy](results/plots/physics_accuracy.png)
 
