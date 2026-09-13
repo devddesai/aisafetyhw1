@@ -176,8 +176,8 @@ held-out reference NLL/perplexity for base and SFT. Choose later data or trainin
 changes using development episodes reserved from the training split. Repeating
 the same deterministic evaluation will not provide independent evidence.
 
-Added three standalone result graphs in PNG/PDF and small validation, failed-scrape,
-and persona-resume configuration checks. Six offline regression tests pass. The
-changes do not alter the successful baseline's training setup or saved scores;
-no training or model evaluation was rerun. Raw dialogue and audit artifacts remain
-in ignored local directories.
+Added two standalone paired-change graphs with 95% confidence intervals in PNG/PDF
+and small validation, failed-scrape, and persona-resume configuration checks. Six
+offline regression tests pass. The changes do not alter the successful baseline's
+training setup or saved scores; no training or model evaluation was rerun. Raw
+dialogue and audit artifacts remain in ignored local directories.

@@ -9,11 +9,9 @@ import matplotlib
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 from matplotlib.ticker import MaxNLocator
-import numpy as np
 
 
-COLORS = ("#356A91", "#C05B36")
-MODELS = ("base", "sft")
+COLOR = "#356A91"
 ROOT = Path(__file__).resolve().parent
 
 
@@ -35,75 +33,49 @@ def text(label):
     return label.replace("%", r"\%") if plt.rcParams["text.usetex"] else label
 
 
-def figure(title, subtitle, figsize=(8, 6), left=0.15, top=0.80, bottom=0.24):
-    fig, ax = plt.subplots(figsize=figsize)
-    fig.subplots_adjust(left=left, right=0.96, bottom=bottom, top=top)
-    fig.suptitle(title, y=0.97, fontsize=22)
-    fig.text(0.5, 0.89, subtitle, ha="center", fontsize=16)
-    return fig, ax
+def comparison_figure(estimate, interval, title, unit, decimals):
+    low, high = interval
+    fig, ax = plt.subplots(figsize=(7.5, 3.5))
+    fig.subplots_adjust(left=0.10, right=0.96, bottom=0.26, top=0.78)
+    fig.suptitle(title, y=0.96, fontsize=22)
 
+    # The saved intervals describe paired differences, not individual model means.
+    ax.axvline(0, ymax=0.82, color="0.65", linestyle="--", linewidth=1)
+    ax.hlines(0, low, high, color=COLOR, linewidth=2)
+    ax.plot([low, high], [0, 0], "|", color=COLOR, markersize=12)
+    ax.plot(estimate, 0, "o", color=COLOR, markersize=9)
+    ax.annotate(f"{estimate:+.{decimals}f}", (estimate, 0), xytext=(0, 13),
+                textcoords="offset points", ha="center", va="bottom", color=COLOR)
+    for endpoint in (low, high):
+        ax.annotate(f"{endpoint:+.{decimals}f}", (endpoint, 0), xytext=(0, -15),
+                    textcoords="offset points", ha="center", va="top", fontsize=15)
 
-def bars(ax, values, ylabel, labels, upper):
-    artists = ax.bar(("Base", "SFT"), values, color=COLORS, width=0.55)
-    ax.bar_label(artists, labels=[text(label) for label in labels], padding=8, fontsize=18)
-    ax.set(ylabel=ylabel, ylim=(0, upper))
-    ax.set_axisbelow(True)
-    ax.grid(axis="y", color="0.9")
-    ax.yaxis.set_major_locator(MaxNLocator(5))
+    lower, upper = min(0, low, estimate), max(0, high, estimate)
+    margin = max((upper - lower) * 0.2, 0.001)
+    ax.set(xlim=(lower - margin, upper + margin), ylim=(-0.8, 0.8), yticks=[],
+           xlabel=f"SFT minus base ({unit})")
+    ax.spines[["left", "top", "right"]].set_visible(False)
+    ax.xaxis.set_major_locator(MaxNLocator(4, steps=[1, 2, 2.5, 5, 10]))
+    ax.text(0, 0.98, "No change", transform=ax.get_xaxis_transform(),
+            ha="center", va="top", fontsize=13, color="0.45")
+    ax.text(0.99, 0.98, text("95% CI"), transform=ax.transAxes,
+            ha="right", va="top", fontsize=15, color="0.35")
+    return fig
 
 
 def persona_figure(metrics):
-    fig, ax = figure("Reference similarity",
-                      f"{metrics['examples']:,} held-out replies from {metrics['episodes']} episodes")
-    similarity = [metrics[name]["mean_cosine_similarity"] for name in MODELS]
-    bars(ax, similarity, "Mean cosine similarity",
-         [f"{value:.4f}" for value in similarity], max(0.25, max(similarity) * 1.22))
-    low, high = metrics["paired_difference_episode_bootstrap_95_ci"]
-    fig.text(0.5, 0.12, text(f"Paired gain {metrics['mean_paired_difference']:+.4f} "
-             f"(95% episode-bootstrap CI: {low:+.4f} to {high:+.4f})"), ha="center", fontsize=14)
-    fig.text(0.5, 0.055, "Semantic similarity to one reference; not a direct persona-style score.",
-             ha="center", fontsize=14)
-    return fig
-
-
-def length_figure(metrics):
-    fig, ax = figure("Generated reply length", f"{metrics['examples']:,} matched prompts, greedy decoding")
-    lengths = [metrics[name]["mean_generated_tokens"] for name in MODELS]
-    bars(ax, lengths, "Mean generated tokens",
-         [f"{value:.1f}" for value in lengths], max(lengths) * 1.3)
-    limit = metrics["run"]["decoding"]["max_new_tokens"]
-    fig.text(0.5, 0.10, f"Same prompts and {limit}-token generation limit for both models.",
-             ha="center", fontsize=14)
-    return fig
+    return comparison_figure(
+        metrics["mean_paired_difference"], metrics["paired_difference_episode_bootstrap_95_ci"],
+        "Reference similarity change", "cosine similarity", 4,
+    )
 
 
 def physics_figure(metrics):
-    fig, accuracy = figure("Physics accuracy", f"{metrics['questions']} MMLU questions, five-shot chat",
-                            figsize=(9, 7), left=0.29, top=0.74, bottom=0.26)
-    subjects = [("high_school_physics", "High-school physics"), ("college_physics", "College physics"),
-                ("conceptual_physics", "Conceptual physics")]
-    rows = [metrics["by_subject"][key] for key, _ in subjects] + [metrics["overall"]]
-    names = [label for _, label in subjects] + ["Overall"]
-    y = np.arange(len(rows))
-    for offset, model, color in zip((-0.18, 0.18), MODELS, COLORS):
-        values = [100 * row[model]["accuracy"] for row in rows]
-        artists = accuracy.barh(y + offset, values, height=0.3, color=color, label=model.capitalize() if model == "base" else "SFT")
-        accuracy.bar_label(artists, labels=[text(f"{value:.2f}%") for value in values], padding=5, fontsize=15)
-    accuracy.set(yticks=y, yticklabels=[f"{name}\n(n = {row['questions']})" for name, row in zip(names, rows)],
-                 xlim=(0, 100), xlabel=text("Accuracy (%)"))
-    accuracy.invert_yaxis()
-    accuracy.axhline(2.5, color="0.85", linewidth=1)
-    accuracy.grid(axis="x", color="0.9")
-    accuracy.set_axisbelow(True)
-    accuracy.legend(loc="lower left", bbox_to_anchor=(0, 1.01), ncol=2, borderaxespad=0)
-    low, high = [100 * value for value in metrics["paired_accuracy_difference_95_ci"]]
-    gain = 100 * metrics["overall"]["accuracy_difference"]
-    fig.text(0.5, 0.115, text(f"Overall gain {gain:+.2f} percentage points (95% CI: {low:+.2f} to {high:+.2f})"),
-             ha="center", fontsize=14)
-    interpretation = ("The interval includes zero: overall change is inconclusive." if low <= 0 <= high
-                      else "The interval excludes zero under this evaluation protocol.")
-    fig.text(0.5, 0.06, interpretation, ha="center", fontsize=14)
-    return fig
+    return comparison_figure(
+        100 * metrics["overall"]["accuracy_difference"],
+        [100 * value for value in metrics["paired_accuracy_difference_95_ci"]],
+        "Physics accuracy change", "percentage points", 2,
+    )
 
 
 def main():
@@ -115,9 +87,8 @@ def main():
     style(args.usetex)
     output_dir = args.output_dir or args.results_dir / "plots"
     output_dir.mkdir(parents=True, exist_ok=True)
-    for filename, name, draw in (("persona.json", "persona_similarity", persona_figure),
-                                 ("persona.json", "reply_length", length_figure),
-                                 ("mmlu_physics.json", "physics_accuracy", physics_figure)):
+    for filename, name, draw in (("persona.json", "persona_change", persona_figure),
+                                 ("mmlu_physics.json", "physics_change", physics_figure)):
         metrics = json.loads((args.results_dir / filename).read_text())
         fig = draw(metrics)
         for extension in ("png", "pdf"):

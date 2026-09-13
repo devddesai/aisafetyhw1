@@ -187,14 +187,12 @@ and 0.998933 for SFT.
 
 ## Results plots
 
-Each file contains one graph: reference similarity, reply length, or physics
-accuracy. Similarity and accuracy include paired gains and 95% bootstrap intervals.
+Dots show paired SFT − base changes, whiskers show 95% bootstrap confidence
+intervals, and the dashed line marks no change.
 
-![Persona reference similarity](results/plots/persona_similarity.png)
+![Change in persona reference similarity](results/plots/persona_change.png)
 
-![Mean generated reply length](results/plots/reply_length.png)
-
-![Base and SFT physics accuracy](results/plots/physics_accuracy.png)
+![Change in physics accuracy](results/plots/physics_change.png)
 
 Regenerate them from the tracked result JSON files, without downloading models or
 datasets:
