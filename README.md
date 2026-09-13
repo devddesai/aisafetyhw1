@@ -1,12 +1,11 @@
-# Sheldon Cooper persona SFT — Checkpoint 1 data
+# Sheldon Cooper persona SFT
 
 Post-training Qwen2.5-3B-Instruct to adopt a fictional persona, then measuring
-what that does to its grade-school math ability. This repo holds the **dataset
-side** of Checkpoint 1: everything that produces training data, plus the frozen
-evaluation set that every later stage must score against.
+what that does to its physics multiple-choice accuracy. This repo contains data
+preparation, LoRA training, and paired persona and physics evaluations for
+Checkpoint 1. The held-out transcript episodes are reserved for persona evaluation.
 
-Training code (`train_sft.py`) and the eval scripts live with the other half of
-the team.
+The STEM benchmark is MMLU physics, replacing the earlier GSM8K plan.
 
 ## Quick start
 
@@ -24,6 +23,178 @@ python3 validate_pairs.py                              # should end "all checks 
 That produces `data/pairs_train.jsonl` and `data/pairs_heldout.jsonl`. Keep
 `--seed 0` — it fixes which episodes are held out, so your split matches
 everyone else's exactly.
+
+## Training
+
+The completed adapter is available in the
+[Checkpoint 1 model release](https://github.com/ST3F4NX/aisafetyhw1/releases/tag/checkpoint-1-sft).
+To reuse it without retraining:
+
+```bash
+mkdir -p out/releases
+gh release download checkpoint-1-sft --repo ST3F4NX/aisafetyhw1 --pattern sft-lora.tar.gz --dir out/releases
+tar -xzf out/releases/sft-lora.tar.gz -C out
+```
+
+The archive contains the adapter, tokenizer, training metadata, and loading
+instructions. It recreates `out/sft-lora/`, which both evaluation scripts use.
+The original base weights are downloaded separately at the pinned revision.
+Built with Qwen. The model artifact includes the Qwen Research License and
+required notices; its license permits research and evaluation use only.
+
+Use Python 3.12 and one NVIDIA GPU with a compatible CUDA driver. Install the
+dependencies in a virtual environment, then run:
+
+```bash
+python -m pip install -r requirements.txt
+python train_sft.py --batch-size 8 --gradient-accumulation-steps 2
+```
+
+On RunPod, keep the virtual environment on the container disk and the dataset
+and output directory on the persistent volume. Installing Python libraries on
+network storage can be substantially slower. The container environment must be
+recreated after the pod is stopped.
+
+This command is intended for a 48 GB GPU and uses 16 examples per optimizer
+update. The default run trains a rank-16 LoRA adapter for one epoch at a learning
+rate of `1e-4`. Earlier conversation turns supply context; only the final assistant
+reply contributes to the loss. The script checks the token masks and rejects
+examples that would be truncated. It does not add a persona instruction.
+
+`out/sft-lora/` contains the adapter, tokenizer, epoch checkpoints, training
+metrics, and a run manifest with the base-model revision, dataset hash, package
+versions, and settings. The adapter must be loaded with its original base model.
+Existing output directories are protected against accidental overwrite. Use
+`--output-dir` for another attempt or `--resume-from-checkpoint` with an epoch
+checkpoint to resume an interrupted run. Run `python train_sft.py --help` for
+the available training settings.
+
+Local validation completed one optimizer step with a tiny randomly initialized
+Qwen model and the actual Qwen tokenizer, then reloaded the updated adapter and
+checked its output. This validates the code path; it is not a trained persona
+model or a GPU benchmark.
+
+The full run on an A40 completed one epoch over all 4,899 examples: 307 optimizer
+updates in 402.5 seconds, with training loss 2.6291. The saved adapter was reloaded
+for generation and backed up locally with checksums. These are training and
+artifact checks, not evidence of persona quality or preserved math ability.
+
+## Persona evaluation
+
+```bash
+python eval_persona.py
+```
+
+This evaluates every held-out example. Both models receive the same preceding
+conversation through the saved chat template, without a persona instruction or
+any part of the final reference answer. Generation is greedy with a shared limit
+of 256 new tokens. The base comparison disables the LoRA adapter on the same
+frozen base weights; the SFT comparison enables it.
+
+`sentence-transformers/all-mpnet-base-v2` embeds each generated reply and its
+matching Sheldon reference. The script averages per-example cosine similarities
+and reports the paired SFT-minus-base difference. Its 95% percentile bootstrap
+interval resamples whole episodes, retaining their examples together. This
+accounts for clustering within episodes, but not every possible source of bias.
+
+The [embedding model](https://huggingface.co/sentence-transformers/all-mpnet-base-v2)
+measures semantic reference similarity, not persona style directly.
+Inspect saved paired outputs as well; a sensible alternative response can score
+poorly against the single reference. Generation lengths, empty replies, token-limit
+hits, and embedding truncation counts are reported to help interpret the scores.
+Episode holdout prevents overlap with this fine-tuning dataset; it cannot establish
+whether the base model encountered the show during pretraining.
+
+`results/persona.json` contains scores and reproducibility metadata only.
+`out/persona/` contains the private prompts, references, generated replies, and
+per-example scores. Re-running the same command resumes completed generation
+batches; changed settings require a new `--output-dir` and `--metrics-file`.
+The embedding revision, model revision, adapter hash, and dataset hash are saved.
+Held-out perplexity and a separate style judgment are not implemented in this
+evaluation script. Do not repeatedly tune against this held-out set and then
+describe it as an untouched final test.
+
+Completed results on 511 examples from 23 episodes:
+
+| Metric | Base | SFT |
+|---|---:|---:|
+| Mean reference cosine similarity | 0.186364 | 0.204125 |
+| Mean generated tokens | 102.33 | 25.46 |
+| Replies reaching the 256-token limit | 38 | 12 |
+
+The mean paired improvement is **0.017761**, with a 95% episode-bootstrap
+interval of **[0.006107, 0.028523]**. Neither model produced empty replies, and
+the embedding model truncated no texts. SFT scores higher on 56.36% of examples.
+Qualitative inspection found repetitive replies that still improved this metric,
+so these results do not establish strong persona quality. See `WORKLOG.md` for
+validation, the exploratory length analysis, and remaining checkpoint work.
+
+## Physics evaluation
+
+```bash
+python eval_mmlu.py --prepare-only
+python eval_mmlu.py --device cuda --batch-size 16
+```
+
+This compares base and SFT accuracy on all test questions from the three physics
+subjects in [MMLU](https://huggingface.co/datasets/cais/mmlu): high-school physics
+(151), college physics (102), and conceptual physics (235), totaling **488**.
+`eval/mmlu_physics.json` freezes the dataset revision and question indices.
+`data/mmlu_physics.json` caches the questions locally; its hash is checked before
+each run. No GSM8K test was run.
+
+Both models receive the same five labeled examples from the corresponding
+subject's development split, followed by the test question and four options.
+The test answer is withheld. The conversation uses the model's chat template
+and a shared instruction to answer with one letter, without a persona prompt.
+
+The predicted answer is whichever of A/B/C/D has the highest next-token
+probability. This is a constrained multiple-choice test, not free-form answer
+generation. It does not require a generated-answer extractor. The script checks
+that each label is one token and records both probabilities normalized over the
+four letters and their total probability mass in the full vocabulary. The latter
+helps reveal when the model would prefer to generate something other than a
+letter. Conditional choice probabilities are not calibrated confidence scores.
+
+The five-shot setup follows the development/test separation used by the
+[original MMLU evaluator](https://github.com/hendrycks/test/blob/master/evaluate.py),
+but uses a chat prompt rather than the original plain-text completion prompt.
+Do not compare these numbers directly to leaderboard results with different
+prompting or scoring protocols. This test measures physics answer selection,
+not explanation quality or persona style.
+
+The script reports accuracy by subject and overall, weighted by question count,
+plus a paired SFT-minus-base accuracy difference and a 95% bootstrap interval
+that resamples paired questions within each subject. Identical questions and
+settings should be retained for future model stages. Test exposure during the
+base model's pretraining cannot be ruled out.
+
+`results/mmlu_physics.json` holds scores and run metadata;
+`out/mmlu_physics/predictions.jsonl` holds individual choices and prompts.
+The same command resumes completed question pairs. Changed settings or code
+require new output and metrics paths. The command above is intended for a
+dedicated NVIDIA GPU. Device selection without `--device` defaults to NVIDIA
+CUDA, then Apple MPS, then CPU. A batch size of 2 is the script default for local
+execution. The reported comparison ran entirely on an H100 with batch size 16.
+
+Completed physics results:
+
+| Subject | Questions | Base accuracy | SFT accuracy |
+|---|---:|---:|---:|
+| High-school physics | 151 | 44.37% (67) | 47.02% (71) |
+| College physics | 102 | 48.04% (49) | 47.06% (48) |
+| Conceptual physics | 235 | 63.83% (150) | 65.96% (155) |
+| Overall | 488 | **54.51% (266)** | **56.15% (274)** |
+
+The paired gain is **1.64 percentage points**, with a 95% stratified paired
+bootstrap interval of **[-1.43, +4.51] percentage points**. This interval includes
+zero, so the test does not establish a clear overall improvement or degradation.
+There were 35 wrong-to-correct changes and 27 correct-to-wrong changes.
+Both models' unrestricted top next token was an answer letter on all 488
+questions. Mean total answer-letter probability mass was 0.999999 for base
+and 0.998933 for SFT.
+
+All predictions and scores were backed up and verified before stopping the H100.
 
 ## What you get
 
@@ -90,9 +261,10 @@ persona's voice, and STEM examples with the arithmetic masked out of the loss.
 first to find out what that alone achieves, so the generated data can be measured
 as a delta against a real baseline rather than bundled in from the start.
 
-Expect the weak spot to be technical questions: transcripts are banter, while the
-eval prompts are questions, and nothing in this dataset looks like a question and
-answer. That's the thing this baseline is meant to reveal.
+Technical questions may be a weak spot: the transcript pairs include questions,
+but primarily contain sitcom conversation rather than worked math solutions.
+Held-out transcript evaluation measures the same conversational setting; MMLU
+physics tests behavior on a different kind of input.
 
 ## Known limitations
 
@@ -102,12 +274,10 @@ answer. That's the thing this baseline is meant to reveal.
   prompts at eval time.
 - Pairs are built from adjacent dialogue, so a reply responding to physical
   action rather than to the previous line will look like a non-sequitur.
-- The GSM8K eval subset is **not** pinned here — that is the eval side's call.
-  It needs freezing before stage-1 numbers exist, or the cross-stage plot breaks.
-- `results/` is currently gitignored. The metric files are a deliverable, but if
-  the eval scripts write held-out reference dialogue alongside the scores, that's
-  copyrighted text we can't commit. Have the eval scripts emit **scores only**,
-  then we can track that directory.
+- The physics evaluation uses multiple-choice selection; it does not test
+  whether the model can produce a coherent worked physics solution.
+- Only the scores-only persona and physics result files are allowed through the
+  results ignore rule. Transcript-derived outputs remain local under `out/persona/`.
 
 ## Files
 
@@ -115,6 +285,12 @@ answer. That's the thing this baseline is meant to reveal.
 scrape_transcripts.py   transcripts -> data/raw_episodes.json
 build_pairs.py          episodes -> train/heldout chat pairs
 validate_pairs.py       fails loudly if the pairs are unusable
+train_sft.py            train pairs -> LoRA adapter and training logs
+eval_persona.py         held-out pairs + adapter -> paired semantic similarity
+eval_mmlu.py            MMLU physics questions + adapter -> paired accuracy
+eval/mmlu_physics.json  frozen dataset revision and evaluation question indices
+WORKLOG.md              completed runs, validation, and remaining work
+requirements.txt        pinned direct dependencies
 data/                   gitignored, rebuild locally
 ```
 

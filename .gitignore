@@ -4,7 +4,9 @@ data/
 
 # Model artifacts and results
 out/
-results/
+results/*
+!results/persona.json
+!results/mmlu_physics.json
 *.safetensors
 *.bin
 
