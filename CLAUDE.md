@@ -3,12 +3,13 @@
 Course assignment: post-train Qwen2.5-3B-Instruct for (a) a fictional persona and
 (b) a STEM capability, across three stages — SFT, RLAIF, RLVR.
 
-Character: Sheldon Cooper. STEM domain: grade-school math (GSM8K).
+Character: Sheldon Cooper. STEM benchmark: MMLU physics, replacing the original
+grade-school math (GSM8K) plan.
 
 **We are on Checkpoint 1 (SFT only). Due Sunday.**
 
-Division of labour: this side of the team builds the **datasets**. The other side
-writes `train_sft.py`, `eval_persona.py`, and `eval_gsm8k.py`.
+The original handoff covered datasets. This checkout now also includes
+`train_sft.py`, `eval_persona.py`, and `eval_mmlu.py`.
 
 ---
 
@@ -24,8 +25,26 @@ Done:
 - `validate_pairs.py` — passing. Asserts the invariants the metrics rely on.
 - `README.md` — written for teammate handoff.
 
-Not started, and owned by the other side of the team: `train_sft.py`,
-`eval_persona.py`, `eval_gsm8k.py`, and the frozen GSM8K eval subset.
+Implemented: `train_sft.py`, with completion-only loss, LoRA, epoch checkpoints,
+run metadata, and a locally verified optimizer/save/reload path using a tiny
+Qwen model. Dependencies are pinned in `requirements.txt`.
+
+Completed: one full SFT epoch on an A40, 307 updates over 4,899 examples in
+402.5 seconds; saved adapter reloaded and checksummed local backup verified.
+
+Implemented: `eval_persona.py` for paired base/SFT reference embedding similarity
+on all 511 held-out examples. Completed mean similarity: base 0.186364, SFT
+0.204125; paired gain 0.017761, episode-bootstrap 95% interval [0.006107,
+0.028523]. See `WORKLOG.md` for output checks and metric limitations.
+
+Implemented: `eval_mmlu.py`, a five-shot chat evaluation of all 488 test questions
+in high-school, college, and conceptual physics. The model selects A/B/C/D by
+next-token probability. The dataset revision and indices are frozen in
+`eval/mmlu_physics.json`. The full H100 run completed: base 266/488 (54.51%), SFT
+274/488 (56.15%); paired difference +1.64 percentage points, 95% stratified
+bootstrap interval [-1.43, +4.51]. Results do not establish a clear overall change.
+
+GSM8K evaluation was replaced by physics and was not run.
 
 Deliberately deferred: generated conversation data, masked STEM data,
 `style_guide.md`. See "Scope decision" below.
@@ -71,15 +90,12 @@ model versions, which breaks cross-stage comparison. Checkpoint 1 uses only
 text-distance metrics (perplexity, embedding similarity). The judge arrives in
 week 2.
 
-### 4. Freeze the eval set — NOT DONE, owned by the eval side
+### 4. Freeze the eval set — DONE for MMLU physics
 
-Pick a fixed GSM8K test subset (200–500 problems), save the indices, and use that
-identical set at every stage. The main deliverable is a plot across stages;
-changing the eval set makes it meaningless.
-
-Which problems to score is a modelling decision, so it belongs to whoever writes
-`eval_gsm8k.py`. Worth settling before training starts: once stage-1 numbers
-exist against one subset, switching subsets throws them away.
+Use the complete frozen physics test set at each stage: 151 high-school physics,
+102 college physics, and 235 conceptual physics questions. Five demonstrations
+per subject come from its development split. Keep the chat prompt, constrained
+letter scoring, data revision, and question indices identical across stages.
 
 ---
 
@@ -96,10 +112,10 @@ than a confound.
 | Generated general conversation | deferred |
 | Masked STEM examples | deferred |
 
-Known risk, accepted: transcripts are banter, eval prompts are questions, and
-nothing in this dataset is question-shaped. Expect persona to be weakest exactly
-when the model is asked a technical question. That is the finding this baseline
-is designed to produce, not a defect.
+Known risk: transcript pairs contain questions but mostly represent sitcom
+conversation, not worked math problems. Held-out transcript evaluation tests
+that conversational setting; MMLU physics tests a different input distribution.
+Whether persona or capability degrades there remains an empirical question.
 
 If the baseline is too weak, the generated slices are the first thing to add —
 they are additive and need no change to what already exists. Note that the
@@ -114,10 +130,10 @@ the STEM slice back also restores that.
 scrape_transcripts.py  -> data/raw_episodes.json          DONE
 build_pairs.py         -> data/pairs_{train,heldout}.jsonl DONE
 validate_pairs.py      -> pass/fail + stats               DONE
-train_sft.py           -> out/sft-lora/                   teammate
-eval_persona.py        -> results/persona.json            teammate
-eval_gsm8k.py          -> results/gsm8k.json              teammate
-eval/gsm8k_subset.json -> frozen problem indices          teammate
+train_sft.py           -> out/sft-lora/                   implemented
+eval_persona.py        -> results/persona.json            implemented
+eval_mmlu.py          -> results/mmlu_physics.json       implemented
+eval/mmlu_physics.json -> frozen physics revision/indices DONE
 
 gen_stem.py            -> data/stem_masked.jsonl          DEFERRED
 gen_convo.py           -> data/convo.jsonl                DEFERRED
@@ -146,7 +162,10 @@ comparison against base Qwen is unfair.
 `Sheldon-bot` (39) are excluded as different voice registers; total loss to name
 variants is under 1%.
 
-## Loss masking (deferred — design retained)
+## Loss masking (deferred — earlier math design retained)
+
+The math-specific design below predates the switch to physics evaluation.
+It is not implemented and does not describe the current MMLU scoring protocol.
 
 Not built. Keep this section: it is the right design if the STEM slice is added,
 and it is the most interesting choice in the checkpoint.
@@ -204,15 +223,16 @@ LoraConfig(r=16, lora_alpha=32, lora_dropout=0.05,
            task_type="CAUSAL_LM")
 ```
 
-2–3 epochs, lr 1e-4 to 2e-4. Train on assistant tokens only — only the final
+The completed baseline used one epoch and learning rate 1e-4. Only the final
 assistant message in each example is a target; earlier turns are context.
 
-Run the GSM8K eval at **every checkpoint**, not just at the end — that's how we
+Run the frozen physics eval at **every checkpoint**, not just at the end — that's how we
 catch degradation while it's still fixable. If Sheldon is too faint, raise r to
 32 before changing anything else. If output is degenerate or catchphrase-spammy,
 reduce epochs first.
 
-Note: `peft`, `trl`, and `sentence_transformers` are not yet installed.
+Training and evaluation dependencies are pinned in `requirements.txt`.
+Sentence-transformers supplies the embedding model for `eval_persona.py`.
 
 ## Metrics for Checkpoint 1
 
@@ -223,22 +243,17 @@ Persona (base vs. SFT, on held-out episodes):
 
 Report both; they fail in different ways.
 
-Capability (base vs. SFT, frozen GSM8K subset):
-- accuracy
-- **extraction success rate** — logged separately. If persona training buries
-  the final answer mid-ramble, we need to know now, not in week 3.
+Capability (base vs. SFT, frozen MMLU physics test set):
+- accuracy overall and per subject, with paired before/after comparisons
+- total probability mass assigned to the four answer letters, as a format
+  diagnostic; constrained choice scoring does not use free-form extraction
 
-Catchphrase frequency per response, from SFT onward. **Stage-zero baseline is
-already measured: 1.22% of training targets contain one** (`roommate agreement`
-25, `my spot` 12, `sarcasm` 9, `bazinga` 9, `hot beverage` 5). `validate_pairs.py`
-prints this. Having the series from stage zero turns the "did the judge get
-gamed" question into a plot instead of a guess.
+Catchphrase frequency per response is a planned diagnostic. The validator
+counts phrase matches, which may count a response more than once; its printed
+percentage is not necessarily the fraction of responses containing a catchphrase.
 
-**Open question for the eval scripts:** `results/` is currently gitignored,
-because if `eval_persona.py` writes held-out reference dialogue beside the
-scores, that is copyrighted text we cannot commit. Have the eval scripts emit
-**scores only**, then we can un-ignore the directory and track the deliverable
-numbers.
+`results/persona.json` is scores-only and can be tracked. Prompts, reference
+dialogue, and generated outputs stay in ignored `out/persona/`.
 
 ## Deliverables
 

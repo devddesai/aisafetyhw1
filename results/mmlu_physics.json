@@ -1,0 +1,97 @@
+{
+  "questions": 488,
+  "by_subject": {
+    "high_school_physics": {
+      "questions": 151,
+      "base": {
+        "correct": 67,
+        "accuracy": 0.44370860927152317,
+        "mean_answer_letter_probability_mass": 0.999998081993583
+      },
+      "sft": {
+        "correct": 71,
+        "accuracy": 0.47019867549668876,
+        "mean_answer_letter_probability_mass": 0.9990183636052719
+      },
+      "accuracy_difference": 0.026490066225165587
+    },
+    "college_physics": {
+      "questions": 102,
+      "base": {
+        "correct": 49,
+        "accuracy": 0.4803921568627451,
+        "mean_answer_letter_probability_mass": 0.9999996686682981
+      },
+      "sft": {
+        "correct": 48,
+        "accuracy": 0.47058823529411764,
+        "mean_answer_letter_probability_mass": 0.9995110519960815
+      },
+      "accuracy_difference": -0.009803921568627472
+    },
+    "conceptual_physics": {
+      "questions": 235,
+      "base": {
+        "correct": 150,
+        "accuracy": 0.6382978723404256,
+        "mean_answer_letter_probability_mass": 0.9999999520626474
+      },
+      "sft": {
+        "correct": 155,
+        "accuracy": 0.6595744680851063,
+        "mean_answer_letter_probability_mass": 0.9986266610470224
+      },
+      "accuracy_difference": 0.02127659574468077
+    }
+  },
+  "overall": {
+    "questions": 488,
+    "base": {
+      "correct": 266,
+      "accuracy": 0.5450819672131147,
+      "mean_answer_letter_probability_mass": 0.9999993141801631
+    },
+    "sft": {
+      "correct": 274,
+      "accuracy": 0.5614754098360656,
+      "mean_answer_letter_probability_mass": 0.9989327162992759
+    },
+    "accuracy_difference": 0.016393442622950838
+  },
+  "paired_accuracy_difference_95_ci": [
+    -0.014344262295081968,
+    0.045081967213114756
+  ],
+  "base_correct_sft_wrong": 27,
+  "base_wrong_sft_correct": 35,
+  "run": {
+    "arguments": {
+      "adapter": "out/sft-lora",
+      "manifest": "eval/mmlu_physics.json",
+      "data": "data/mmlu_physics.json",
+      "output_dir": "out/mmlu_physics",
+      "metrics_file": "results/mmlu_physics.json",
+      "batch_size": 16,
+      "device": "cuda",
+      "seed": 0,
+      "prepare_only": false
+    },
+    "base_model": "Qwen/Qwen2.5-3B-Instruct",
+    "base_revision": "aa8e72537993ba99e69dfaafa59ed015b17504d1",
+    "adapter_sha256": "9fec5a6485fb31e7978a88ad377e55f32f330f3d1d54ae46e932d9db58f54f87",
+    "adapter_config_sha256": "4a63ec99c039bd8674338dcbf6931aeca3eb83dceac0669d380801ad63347351",
+    "data_sha256": "6e13c66edbb9ef79d2595ad713118fea2cc9f670c29c3631100fda2745e65fa0",
+    "manifest_sha256": "8637718e9b1139823831f6a12db4e400b8f76dfa75d8650a9d4faa3313c4caa0",
+    "script_sha256": "0b2ceba57920e6a30bf80894b6b8ddcc39032856fc2795d8d12651ebe2cdf048",
+    "device": "cuda",
+    "dtype": "torch.bfloat16",
+    "protocol": "Five-shot chat; choose highest-probability next-token A/B/C/D; no free-form generation or chain of thought.",
+    "packages": {
+      "torch": "2.14.0",
+      "transformers": "5.17.0",
+      "peft": "0.20.0",
+      "datasets": "5.0.1",
+      "numpy": "2.5.3"
+    }
+  }
+}

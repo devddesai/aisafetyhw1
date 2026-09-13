@@ -1,0 +1,57 @@
+{
+  "examples": 511,
+  "episodes": 23,
+  "base": {
+    "mean_cosine_similarity": 0.18636355661366083,
+    "mean_generated_tokens": 102.32681017612525,
+    "empty_responses": 0,
+    "generation_limit_hits": 38,
+    "embedding_truncations": 0
+  },
+  "sft": {
+    "mean_cosine_similarity": 0.20412479646124834,
+    "mean_generated_tokens": 25.455968688845402,
+    "empty_responses": 0,
+    "generation_limit_hits": 12,
+    "embedding_truncations": 0
+  },
+  "mean_paired_difference": 0.017761239847587512,
+  "paired_difference_episode_bootstrap_95_ci": [
+    0.006107079900463979,
+    0.028523358508634068
+  ],
+  "fraction_sft_higher": 0.5636007827788649,
+  "embedding_max_sequence_length": 384,
+  "reference_embedding_truncations": 0,
+  "interpretation": "Semantic similarity to the matching reference; not a direct measure of persona style.",
+  "run": {
+    "arguments": {
+      "adapter": "out/sft-lora",
+      "data": "data/pairs_heldout.jsonl",
+      "output_dir": "out/persona",
+      "metrics_file": "results/persona.json",
+      "embedding_model": "sentence-transformers/all-mpnet-base-v2",
+      "embedding_revision": null,
+      "batch_size": 8,
+      "max_new_tokens": 256,
+      "bootstrap_samples": 2000,
+      "seed": 0
+    },
+    "base_model": "Qwen/Qwen2.5-3B-Instruct",
+    "base_revision": "aa8e72537993ba99e69dfaafa59ed015b17504d1",
+    "adapter_sha256": "9fec5a6485fb31e7978a88ad377e55f32f330f3d1d54ae46e932d9db58f54f87",
+    "dataset_sha256": "4261306f53682f8aa3ed991090622ecaf57489d897da62a10fc335983d453f82",
+    "embedding_revision": "e8c3b32edf5434bc2275fc9bab85f82640a19130",
+    "decoding": {
+      "do_sample": false,
+      "num_beams": 1,
+      "max_new_tokens": 256
+    },
+    "packages": {
+      "torch": "2.14.0",
+      "transformers": "5.17.0",
+      "peft": "0.20.0",
+      "sentence-transformers": "6.0.1"
+    }
+  }
+}
