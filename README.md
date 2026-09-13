@@ -50,11 +50,6 @@ python -m pip install -r requirements.txt
 python train_sft.py --batch-size 8 --gradient-accumulation-steps 2
 ```
 
-On RunPod, keep the virtual environment on the container disk and the dataset
-and output directory on the persistent volume. Installing Python libraries on
-network storage can be substantially slower. The container environment must be
-recreated after the pod is stopped.
-
 This command is intended for a 48 GB GPU and uses 16 examples per optimizer
 update. The default run trains a rank-16 LoRA adapter for one epoch at a learning
 rate of `1e-4`. Earlier conversation turns supply context; only the final assistant
@@ -69,15 +64,9 @@ Existing output directories are protected against accidental overwrite. Use
 checkpoint to resume an interrupted run. Run `python train_sft.py --help` for
 the available training settings.
 
-Local validation completed one optimizer step with a tiny randomly initialized
-Qwen model and the actual Qwen tokenizer, then reloaded the updated adapter and
-checked its output. This validates the code path; it is not a trained persona
-model or a GPU benchmark.
-
 The full run on an A40 completed one epoch over all 4,899 examples: 307 optimizer
-updates in 402.5 seconds, with training loss 2.6291. The saved adapter was reloaded
-for generation and backed up locally with checksums. These are training and
-artifact checks, not evidence of persona quality or preserved math ability.
+updates in 402.5 seconds, with training loss 2.6291. See `WORKLOG.md` for training
+validation and artifact checks; persona and physics results are below.
 
 ## Persona evaluation
 
@@ -110,6 +99,8 @@ whether the base model encountered the show during pretraining.
 per-example scores. Re-running the same command resumes completed generation
 batches; changed settings require a new `--output-dir` and `--metrics-file`.
 The embedding revision, model revision, adapter hash, and dataset hash are saved.
+Resuming now also checks the adapter configuration; older runs without that hash
+need a new output directory and metrics path.
 Held-out perplexity and a separate style judgment are not implemented in this
 evaluation script. Do not repeatedly tune against this held-out set and then
 describe it as an untouched final test.
@@ -194,7 +185,25 @@ Both models' unrestricted top next token was an answer letter on all 488
 questions. Mean total answer-letter probability mass was 0.999999 for base
 and 0.998933 for SFT.
 
-All predictions and scores were backed up and verified before stopping the H100.
+## Results plots
+
+The plots summarize the saved scores, including the paired gains and their 95%
+bootstrap intervals:
+
+![Persona reference similarity and response lengths](results/plots/persona_summary.png)
+
+![Base and SFT physics accuracy](results/plots/physics_accuracy.png)
+
+Regenerate them from the tracked result JSON files, without downloading models or
+datasets:
+
+```bash
+python -m pip install -r requirements-plots.txt
+python plot_results.py
+```
+
+The script writes PNG and PDF versions with serif fonts and outward ticks. Add
+`--usetex` to render text with LaTeX if a working LaTeX installation is available.
 
 ## What you get
 
@@ -234,15 +243,15 @@ boundary, since dialogue from another scene isn't really context.
 ## Decisions worth knowing about
 
 **The split is by episode, not by row.** Sitcoms reuse jokes and beats, so
-splitting individual lines at random would put near-copies on both sides and make
-the held-out score look better than it is. Splitting whole episodes avoids that.
+splitting individual lines at random risks putting near-copies on both sides and
+inflating the held-out score. Whole-episode splitting prevents shared episodes,
+though jokes or dialogue can still recur across episodes.
 
-**Minimum response length is 10 words.** Sheldon's very short lines are 62% of
-his dialogue but make poor training targets — a dataset of one-liners teaches the
-model to answer everything in one clipped sentence, which would later hurt its
-ability to produce a full worked answer with the final result at the end. Ten
-words keeps the mean at a substantive 22 while retaining ~50% more data than the
-original 15-word floor.
+**Minimum response length is 10 words.** About 44% of Sheldon's raw lines fall
+below this cutoff. The filter aims to reduce the risk of teaching consistently clipped
+replies; whether short targets hurt worked-answer generation has not been tested.
+Ten words keeps the mean at 22 while retaining ~50% more data than the original
+15-word floor.
 
 **Only lines attributed exactly to "Sheldon" are used.** The transcripts also
 contain `Past Sheldon` (66 lines) and `Sheldon-bot` (39) — deliberately excluded,
@@ -252,6 +261,8 @@ since those are different voice registers. Total loss to name variants is under
 **No system prompt in the training data.** The persona is supposed to end up in
 the weights, not in the context window; putting it in the prompt would make the
 comparison against base Qwen unfair.
+The saved Qwen chat template still inserts its generic helpful-assistant system
+message, consistently in training and persona evaluation.
 
 ## What's deliberately not here yet
 
@@ -276,8 +287,9 @@ physics tests behavior on a different kind of input.
   action rather than to the previous line will look like a non-sequitur.
 - The physics evaluation uses multiple-choice selection; it does not test
   whether the model can produce a coherent worked physics solution.
-- Only the scores-only persona and physics result files are allowed through the
-  results ignore rule. Transcript-derived outputs remain local under `out/persona/`.
+- Only scores-only persona and physics results and their generated plots are
+  tracked under `results/`. Transcript-derived outputs remain local under
+  `out/persona/`.
 
 ## Files
 
@@ -288,9 +300,11 @@ validate_pairs.py       fails loudly if the pairs are unusable
 train_sft.py            train pairs -> LoRA adapter and training logs
 eval_persona.py         held-out pairs + adapter -> paired semantic similarity
 eval_mmlu.py            MMLU physics questions + adapter -> paired accuracy
+plot_results.py         saved result scores -> results/plots/
 eval/mmlu_physics.json  frozen dataset revision and evaluation question indices
 WORKLOG.md              completed runs, validation, and remaining work
 requirements.txt        pinned direct dependencies
+requirements-plots.txt  lightweight plotting dependency
 data/                   gitignored, rebuild locally
 ```
 

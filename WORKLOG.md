@@ -133,3 +133,51 @@ completion protocol, so leaderboard comparisons require care. It measures
 physics answer selection rather than explanation quality. Pretraining exposure
 to MMLU cannot be ruled out. The remaining work includes assembling the checkpoint
 submission and deciding whether to add held-out persona perplexity.
+
+## Checkpoint review, September 12, 2026
+
+The available evidence does not show a failed training run or require rerunning
+the baseline. The persona similarity gain has an episode-bootstrap interval above
+zero, but measures semantic agreement with a reference, not character style.
+Physics gains eight correct answers out of 488, with an interval spanning zero;
+transcript-only SFT was not designed to teach physics.
+
+Downloaded the published Checkpoint 1 adapter archive and verified its archive
+checksum and all 11 per-file checksums. The weights match both evaluation hashes;
+the configuration also matches the physics evaluation. All 504 adapter tensors
+are finite, and all 252 LoRA B matrices are nonzero across the 36 layers and seven
+target modules. This rules out an untouched, all-zero adapter, but does not prove
+that its learned behavior is useful. The released metadata records a fresh,
+one-epoch run; its batch settings imply the reported 307 optimizer updates.
+
+Rebuilt all 231 episodes and validated 4,899 training / 511 held-out examples.
+Both dataset hashes exactly match the published run. Checked every example's
+prompt prefix, target boundary, EOS, and length with the released tokenizer and
+the training script's preparation function. Training sequences reach at most
+275 tokens, below the 1,024-token limit. Their 539,522 total tokens exactly match
+the training log; only 150,108 are supervised suffix tokens, including end-of-turn
+markers. The rest supply context. The template inserts Qwen's generic assistant
+system message consistently in training and persona evaluation.
+
+The data teaches brief sitcom continuations: at most three preceding raw lines,
+with other speakers merged into one user role, and mean training targets of
+21.84 words. SFT outputs average 18.62 words versus 21.62 for held-out references
+in the original length analysis. Learning shorter replies is consistent with
+that task; generic, off-topic, and repetitive replies remain a quality concern.
+The released three-response sample supports that concern but is not a formal
+style evaluation. These are possible data/task limitations, not proven causes.
+
+The release lacks per-step loss, learning-rate, and gradient-norm logs, and the
+training script has no validation-loss evaluation. Final training loss alone
+cannot distinguish underfitting from overfitting. Before another training run,
+recover those logs and the private paired outputs; review a fixed blinded sample
+for relevance, repetition, and recognizable style, and measure completion-only
+held-out reference NLL/perplexity for base and SFT. Choose later data or training
+changes using development episodes reserved from the training split. Repeating
+the same deterministic evaluation will not provide independent evidence.
+
+Added reproducible PNG/PDF result plots and small validation, failed-scrape, and
+persona-resume configuration checks. Six offline regression tests pass. The
+changes do not alter the successful baseline's training setup or saved scores;
+no training or model evaluation was rerun. Raw dialogue and audit artifacts remain
+in ignored local directories.

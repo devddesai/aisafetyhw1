@@ -1,0 +1,2 @@
+# Plot saved scores without installing the model training dependencies.
+matplotlib==3.10.8

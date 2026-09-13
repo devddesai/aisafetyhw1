@@ -7,6 +7,10 @@ out/
 results/*
 !results/persona.json
 !results/mmlu_physics.json
+!results/plots/
+results/plots/*
+!results/plots/*.png
+!results/plots/*.pdf
 *.safetensors
 *.bin
 

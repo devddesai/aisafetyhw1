@@ -130,6 +130,7 @@ def main():
         "base_model": run["arguments"]["model"],
         "base_revision": run["model_revision"],
         "adapter_sha256": digest(args.adapter / "adapter_model.safetensors"),
+        "adapter_config_sha256": digest(args.adapter / "adapter_config.json"),
         "dataset_sha256": digest(args.data),
         "embedding_revision": embedding_revision,
         "decoding": {"do_sample": False, "num_beams": 1, "max_new_tokens": args.max_new_tokens},
