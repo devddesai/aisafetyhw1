@@ -249,8 +249,8 @@ Capability (base vs. SFT, frozen MMLU physics test set):
   diagnostic; constrained choice scoring does not use free-form extraction
 
 Catchphrase frequency per response is a planned diagnostic. The validator
-counts phrase matches, which may count a response more than once; its printed
-percentage is not necessarily the fraction of responses containing a catchphrase.
+reports both phrase matches and the fraction of responses containing at least
+one catchphrase, so a response with several phrases counts once in the percentage.
 
 `results/persona.json` is scores-only and can be tracked. Prompts, reference
 dialogue, and generated outputs stay in ignored `out/persona/`.

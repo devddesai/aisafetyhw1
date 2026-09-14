@@ -33,7 +33,9 @@ def normalize(s: str) -> str:
 
 def get_episode_links(session):
     """Sidebar 'Pages' list appears on every page and holds every episode."""
-    soup = BeautifulSoup(session.get(SEED, headers=HEADERS, timeout=30).text, "html.parser")
+    response = session.get(SEED, headers=HEADERS, timeout=30)
+    response.raise_for_status()
+    soup = BeautifulSoup(response.text, "html.parser")
     seen, out = set(), []
     for a in soup.find_all("a", href=True):
         href = a["href"].split("#")[0].rstrip("/") + "/"
@@ -96,21 +98,27 @@ def main():
     eps = get_episode_links(s)
     if args.limit:
         eps = eps[:args.limit]
+    if not eps:
+        sys.exit("No episode links found; output was not written")
     print(f"found {len(eps)} episode pages", file=sys.stderr)
 
     out = []
     for i, ep in enumerate(eps, 1):
         try:
-            html = s.get(ep["url"], headers=HEADERS, timeout=30).text
-            lines = parse_episode(html)
+            response = s.get(ep["url"], headers=HEADERS, timeout=30)
+            response.raise_for_status()
+            lines = parse_episode(response.text)
+            if not lines:
+                raise ValueError("No dialogue lines found")
         except Exception as e:
             print(f"  !! {ep['title']}: {e}", file=sys.stderr)
-            continue
+            sys.exit("Scrape failed; output was not written")
         out.append({**ep, "lines": lines})
         print(f"[{i}/{len(eps)}] {ep['title']}: {len(lines)} lines", file=sys.stderr)
         time.sleep(args.delay)
 
-    json.dump(out, open(args.out, "w"), indent=1)
+    with open(args.out, "w") as f:
+        json.dump(out, f, indent=1)
     tot = sum(len(e["lines"]) for e in out)
     shel = sum(1 for e in out for l in e["lines"] if l["speaker"].lower() == "sheldon")
     print(f"\n{len(out)} episodes, {tot} lines, {shel} Sheldon lines -> {args.out}", file=sys.stderr)

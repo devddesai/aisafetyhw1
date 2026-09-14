@@ -51,10 +51,8 @@ def check_shape(rows, split, errors):
         if len(msgs) < 2:
             errors.append(f"{where}: only {len(msgs)} messages")
             continue
-        if msgs[0]["role"] != "user":
-            errors.append(f"{where}: starts with {msgs[0]['role']}, expected user")
-        if msgs[-1]["role"] != "assistant":
-            errors.append(f"{where}: ends with {msgs[-1]['role']}, expected assistant")
+        if msgs[-1].get("role") != "assistant":
+            errors.append(f"{where}: ends with {msgs[-1].get('role')}, expected assistant")
 
         for j, m in enumerate(msgs):
             if not m.get("content", "").strip():
@@ -62,8 +60,9 @@ def check_shape(rows, split, errors):
             if leaked_speaker(m.get("content", "")):
                 errors.append(f"{where}: message {j} has a speaker-name prefix")
             # alternating roles -- the chat template assumes strict u/a/u/a
-            if j > 0 and m["role"] == msgs[j - 1]["role"]:
-                errors.append(f"{where}: two {m['role']} messages in a row")
+            expected = "user" if j % 2 == 0 else "assistant"
+            if m.get("role") != expected:
+                errors.append(f"{where}: message {j} has role {m.get('role')}, expected {expected}")
 
 
 def check_split_isolation(train, heldout, errors):
@@ -92,13 +91,16 @@ def describe(rows, split):
     print(f"  turns per example: {dict(sorted(Counter(len(r['messages']) for r in rows).items()))}")
 
     hits = Counter()
+    responses_with_catchphrase = 0
     for r in rows:
         text = r["messages"][-1]["content"].lower()
+        responses_with_catchphrase += any(phrase in text for phrase in CATCHPHRASES)
         for phrase in CATCHPHRASES:
             if phrase in text:
                 hits[phrase] += 1
     total = sum(hits.values())
-    print(f"  catchphrases: {total} in {n} responses ({100*total/n:.2f}% of targets)")
+    print(f"  catchphrases: {total} phrase matches in {responses_with_catchphrase}/{n} responses "
+          f"({100*responses_with_catchphrase/n:.2f}% of targets)")
     for phrase, c in hits.most_common():
         print(f"      {phrase:20s} {c}")
 
@@ -110,6 +112,9 @@ def main():
     args = ap.parse_args()
 
     train, heldout = load(args.train), load(args.heldout)
+    for split, rows in (("train", train), ("heldout", heldout)):
+        if not rows:
+            ap.error(f"{split} split is empty; rebuild the dataset before validating")
     errors = []
 
     check_shape(train, "train", errors)
